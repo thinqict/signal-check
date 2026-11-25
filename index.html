@@ -114,8 +114,8 @@ const now=()=>performance.now();
 const tfetch=(u,o={},ms=15000)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,cache:'no-store',signal:c.signal}).finally(()=>clearTimeout(t))};
 function locate(){return new Promise(res=>{
   if(!navigator.geolocation){R.geoErr='unsupported';res(null);return}
-  const t0=now();delete R.geoErr;
-  let best=null,id=null;const end=()=>{if(id!=null)navigator.geolocation.clearWatch(id);res(best)};
+  const t0=now();delete R.geoErr;R.geoTries=(R.geoTries||0)+1;
+  let best=null,id=null;const end=()=>{if(id!=null)navigator.geolocation.clearWatch(id);if(!best&&!R.geoErr){R.geoErr='timeout';R.geoMs=Math.round(now()-t0)}res(best)};
   const tm=setTimeout(end,25000);
   id=navigator.geolocation.watchPosition(p=>{const c=p.coords;if(!best||c.accuracy<best.acc){best={lat:+c.latitude.toFixed(6),lon:+c.longitude.toFixed(6),acc:Math.round(c.accuracy),alt:c.altitude==null?null:Math.round(c.altitude)};
       setRow('מיקום',`±${best.acc} מ'`,best.acc<=50?'ok':'wait')}
@@ -123,12 +123,12 @@ function locate(){return new Promise(res=>{
     err=>{clearTimeout(tm);R.geoErr=err.code===1?'denied':'unavailable';R.geoMs=Math.round(now()-t0);end()},{enableHighAccuracy:true,maximumAge:0,timeout:25000})})}
 // why the location failed, and what to do (Chrome on Android refuses to show the permission prompt over chat bubbles / floating windows)
 async function geoHelp(){const el=$('geoHelp');let st=null;
-  try{st=(await navigator.permissions.query({name:'geolocation'})).state}catch(e){}
+  try{st=(await navigator.permissions.query({name:'geolocation'})).state}catch(e){}R.geoPerm=st;
   const blocked=st==='denied',off=R.geoErr==='unavailable',overlay=!blocked&&!off;
   const site=ios?'בספארי: לחץ על "aA" ליד הכתובת ← הגדרות אתר ← מיקום ← אפשר. אם לא עוזר: הגדרות ← פרטיות ← שירותי מיקום ← Safari ← "בזמן השימוש".'
     :'לחץ על הסמל משמאל לכתובת (מנעול/הגדרות) ← הרשאות ← מיקום ← אפשר, ואז "נסה שוב".';
   el.innerHTML=`<b>לא הצלחנו לקבל מיקום.</b> בדרך כלל זה אחד מאלה:<ol>
-    ${and?`<li class="${overlay?'hot':''}">פתוחות <b>בועות צ'אט או חלון צף</b> (בועת וואטסאפ / מסנג'ר, מסנן אור כחול, הקלטת מסך, אפליקציה שמציגה מעל אחרות) – הדפדפן לא מציג מעליהן את בקשת ההרשאה. סגור אותן ולחץ "נסה שוב".</li>`:''}
+    ${and?`<li class="${overlay?'hot':''}">פתוחות <b>בועות צ'אט או חלון צף</b> (בועת וואטסאפ / מסנג'ר, מסנן אור כחול, הקלטת מסך, אפליקציה שמציגה מעל אחרות) – הדפדפן לא מציג מעליהן את בקשת ההרשאה. סגור אותן ולחץ "נסה שוב". <b>אם לא ברור מה פתוח – אפשר לאשר בלי החלון:</b> לחץ על הסמל משמאל לכתובת ← הרשאות (או "הגדרות אתר") ← מיקום ← אפשר, ואז "נסה שוב".</li>`:''}
     <li class="${off?'hot':''}">ה<b>מיקום (GPS) כבוי</b> בטלפון – הפעל אותו מהתפריט העליון ולחץ "נסה שוב".</li>
     <li class="${blocked?'hot':''}">ההרשאה <b>נחסמה</b> קודם – ${site}</li></ol>
     <button id="geoRetry">📍 נסה שוב מיקום</button>
@@ -175,10 +175,10 @@ $('send').onclick=()=>{
   R.wh=(document.querySelector('#where input:checked')||{}).value||null;R.txt=$('txt').value.trim().slice(0,600)||null;
   R.dev=model||null;R.os=ios?'iOS':and?'Android':null;R.sent=new Date().toISOString();
   const opT=$('op').selectedOptions[0].textContent,lines=['בדיקת קליטה'+(tok?' · קוד '+tok:'')];
-  if(R.lat!=null)lines.push(`מיקום: ${R.lat}, ${R.lon} (±${R.acc} מ') https://maps.google.com/?q=${R.lat},${R.lon}`);else lines.push('מיקום: לא התקבל'+(R.geoErr==='denied'?' (ההרשאה נחסמה)':'')+' – אשלח שיתוף מיקום');
-  lines.push('מפעילה: '+opT+(R.asn?` (AS${R.asn})`:''));
+  if(R.lat!=null)lines.push(`מיקום: ${R.lat}, ${R.lon} (±${R.acc} מ') https://maps.google.com/?q=${R.lat},${R.lon}`);else lines.push('מיקום: לא התקבל'+({denied:' (ההרשאה נחסמה)',timeout:' (אין תשובה)',unavailable:' (GPS לא זמין)'}[R.geoErr]||'')+' – אשלח שיתוף מיקום');
+  lines.push('מפעילה (לפי המתלונן): '+opT);if(R.asn)lines.push('רשת הגלישה (לפי כתובת IP): '+(ASN[R.asn]?ASN[R.asn][1]+' ':'')+'AS'+R.asn);
   if(R.dl!=null||R.rtt!=null)lines.push(`הורדה ${R.dl??'—'} · העלאה ${R.ul??'—'} Mb/s · תגובה ${R.rtt??'—'} ms`);else lines.push('בדיקת מהירות: לא בוצעה');
-  if(R.ct||R.et)lines.push('חיבור: '+[R.ct,R.et].filter(Boolean).join(' / '));
+  if(R.ct)lines.push('חיבור: '+({cellular:'סלולרי',wifi:'WiFi – לא סלולרי!',ethernet:'קווי'}[R.ct]||R.ct));
   if(R.dev)lines.push('מכשיר: '+R.dev+(R.os?' · '+R.os:''));
   if(R.pb.length)lines.push('בעיה: '+R.pb.map(k=>PB.find(x=>x[0]===k)[1]).join(', '));
   if(R.wh)lines.push('איפה: '+WH.find(x=>x[0]===R.wh)[1]);
